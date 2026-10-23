@@ -1,0 +1,46 @@
+A ideia central é separar o cérebro do visual: um motor de simulação que calcula tudo, e uma camada 3D que só mostra o que o motor gerou. Assim você liga e desliga tecnologias no motor e o 3D apenas reflete. Eu faria nesta ordem:
+
+1. Definir o que você quer comparar
+Escolha as perguntas e os indicadores antes de qualquer código. Por exemplo: nível de serviço, rupturas, divergência de inventário, tempo de separação, tempo de recebimento, estoque médio, custo total e retorno do investimento. Tudo o que vier depois serve para medir isso.
+
+2. Descrever o almoxarifado como dados
+Em vez de desenhar à mão, guarde o layout em um arquivo (JSON): corredores, prateleiras, posições, doca de recebimento, área de expedição, com coordenadas. O motor usa isso para calcular distâncias e tempos, e o 3D usa o mesmo arquivo para desenhar. Mudar o layout vira editar um arquivo.
+
+3. Evoluir o motor para eventos e “agentes”
+O motor atual é diário. Para o 3D você precisa de tempo mais fino: pedidos de retirada chegando ao longo do dia, operadores que andam até a prateleira, caminhões que chegam e descarregam. Em Python, a biblioteca SimPy faz esse tipo de simulação de eventos. O motor diário atual continua valendo como o “cérebro de reposição” dentro dele.
+
+4. Separar estoque físico de estoque no sistema
+Este é o passo mais importante para comparar RFID e visão computacional. Hoje o simulador assume que o sistema sempre sabe o estoque exato. Na vida real, retiradas sem baixa, itens no lugar errado e erros de contagem fazem o sistema divergir da prateleira. Sem modelar essa divergência, essas tecnologias não teriam efeito nenhum a mostrar.
+
+5. Fazer cada tecnologia ser um módulo com liga/desliga
+Cada módulo muda parâmetros específicos do motor:
+
+Módulo	O que ele altera na simulação
+RFID	reduz a divergência de inventário, acelera recebimento e contagem, localiza itens
+Visão computacional	detecta retiradas e ocupação de prateleira, reduz erros de separação
+SmartStock	troca a política de reposição (min/max fixo por adaptativa)
+
+Cada um também tem custo (equipamento, instalação, manutenção), para você ver se compensa.
+
+5b. Atenção aos valores
+Os números de efeito (por exemplo, “RFID reduz divergência de 8% para 1%”) serão suposições suas no início. Busque valores em artigos, fornecedores ou em um piloto pequeno, e deixe todos editáveis. Os resultados são tão confiáveis quanto essas premissas.
+
+6. Rodar cenários com a mesma aleatoriedade
+Com três módulos há 8 combinações (nenhum, só RFID, RFID + SmartStock, todos, etc.). Rode todas com a mesma semente, ou seja, mesma demanda e mesmos atrasos, para a diferença vir só das tecnologias. Guarde os indicadores de cada uma em uma tabela.
+
+7. Gerar um registro de eventos
+Durante a simulação, grave um arquivo com o que aconteceu: “às 09:12 o operador 2 saiu da doca e foi para a posição B-14”, “às 09:30 o item X chegou”. Esse arquivo é a ponte para o 3D.
+
+8. Construir a visualização 3D
+A opção mais prática é uma página web com Three.js (ou react-three-fiber): prateleiras como caixas, operadores como pontos que se movem, cor da prateleira conforme o nível de estoque, e ícones ou efeitos para RFID e câmeras. A página lê o registro de eventos e reproduz como um filme, com controle de velocidade. Alternativas: Unity ou Godot, que são mais pesadas, mas dão mais controle visual. Comece simples, com cubos coloridos, e só depois capriche.
+
+9. Montar a interface de comparação
+Um painel com interruptores (RFID, visão, SmartStock), sliders de parâmetros e, ao lado do 3D, os indicadores. O ideal é poder colocar dois cenários lado a lado e ver a diferença nos números.
+
+10. Validar e calibrar
+Compare o resultado do cenário “sem nada” com o que você sabe do almoxarifado real (taxa de ruptura, tempo médio de separação). Se a base não reproduz a realidade atual, os ganhos simulados não servem de argumento.
+
+Minha recomendação de ordem
+Faça os passos 2 a 6 primeiro, com resultados em tabela e gráficos. Só depois construa o 3D (7 e 8). Assim você já tem a comparação funcionando, e o 3D vira uma camada que ajuda a apresentar e a entender, não um risco que trava o projeto.
+
+Se quiser, o próximo passo concreto é eu montar o passo 4: adicionar ao simulador atual o estoque físico versus o estoque do sistema, com um módulo RFID simples que liga e desliga. Isso já dá a primeira comparação real entre cenários.

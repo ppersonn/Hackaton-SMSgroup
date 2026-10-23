@@ -1,0 +1,230 @@
+<title>Simulador 3D de Almoxarifado</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: cabeçalho enxuto, duas vistas 3D lado a lado (empilham no celular), relógio comum,
+   depois comparação em tabela, custo e séries ao longo do ano. Visual de planta industrial:
+   grafite frio, verde-azulado como acento, longarinas laranja só dentro da cena 3D. */
+:root {
+  --bg: #eff2f3; --surface: #ffffff; --ink: #172228; --muted: #596972; --line: #d3dadf;
+  --accent: #0b7a75; --accent-ink: #ffffff; --good: #1b7f47; --bad: #bf3b2c; --warn: #9a6a12;
+  --hud: rgba(255,255,255,0.9); --scene-bg: #dfe6e9; --floor: #c9d2d7; --lane: #d6dde1; --yard: #cdd6da;
+  --c1: #5b7a8c; --c2: #0b7a75; --c3: #8a6bb8; --c4: #c0453a; --c5: #d19a2b; --c6: #1f2d35;
+  --ref: #7a8a94; --sel: #0b7a75;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-disp: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171a; --surface: #192126; --ink: #e5ecef; --muted: #93a3ac; --line: #2a353c;
+    --accent: #3fc1b8; --accent-ink: #08211f; --good: #4cc287; --bad: #ef6f60; --warn: #e0b252;
+    --hud: rgba(20,27,31,0.88); --scene-bg: #0c1114; --floor: #232d33; --lane: #2d3a41; --yard: #181f23;
+    --c1: #7b9aac; --c2: #3fc1b8; --c3: #a58cd3; --c4: #ef6f60; --c5: #e0b252; --c6: #c9d5da;
+    --ref: #8a99a2; --sel: #3fc1b8; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171a; --surface: #192126; --ink: #e5ecef; --muted: #93a3ac; --line: #2a353c;
+  --accent: #3fc1b8; --accent-ink: #08211f; --good: #4cc287; --bad: #ef6f60; --warn: #e0b252;
+  --hud: rgba(20,27,31,0.88); --scene-bg: #0c1114; --floor: #232d33; --lane: #2d3a41; --yard: #181f23;
+  --c1: #7b9aac; --c2: #3fc1b8; --c3: #a58cd3; --c4: #ef6f60; --c5: #e0b252; --c6: #c9d5da;
+  --ref: #8a99a2; --sel: #3fc1b8; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 18px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 16px; }
+h1 { font: 600 26px/1.1 var(--f-disp); margin: 0; letter-spacing: 0.01em; }
+h2 { font: 600 17px/1.2 var(--f-disp); margin: 0 0 10px; letter-spacing: 0.02em; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+.aviso { margin: 8px 0 0; padding: 8px 10px; border-left: 3px solid var(--warn); background: var(--surface); color: var(--ink); font-size: 13px; }
+.nm, .ctl output, .hud-k b { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.controls .lab { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.sws { display: flex; flex-wrap: wrap; gap: 8px; }
+button, select, input { font: inherit; color: inherit; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sw { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); cursor: pointer; font-weight: 500; }
+.sw .knob { width: 26px; height: 14px; border-radius: 7px; background: var(--line); position: relative; transition: background .15s; }
+.sw .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); transition: transform .15s; }
+.sw[aria-checked="true"] { border-color: var(--accent); }
+.sw[aria-checked="true"] .knob { background: var(--accent); }
+.sw[aria-checked="true"] .knob::after { transform: translateX(12px); }
+select { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; max-width: 100%; }
+.right { margin-left: auto; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.btn { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: 500; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); min-width: 104px; }
+label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.pane { position: relative; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+.ph { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.ph .tag { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.ptitle { font: 600 16px var(--f-disp); }
+.chips { display: flex; gap: 4px; }
+.chip { font: 500 11px var(--f-body); padding: 2px 7px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.cv { position: relative; height: clamp(300px, 48vh, 540px); background: var(--scene-bg); }
+.cv canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hud-k { position: absolute; top: 8px; right: 8px; background: var(--hud); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font-size: 12px; display: grid; gap: 2px; min-width: 176px; pointer-events: none; }
+.hud-k div { display: flex; justify-content: space-between; gap: 12px; }
+.hud-k span { color: var(--muted); }
+.hud-o { position: absolute; left: 8px; bottom: 8px; background: var(--hud); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font-size: 12px; display: grid; gap: 2px; pointer-events: none; }
+.hud-o i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+
+.player { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.player input[type=range] { flex: 1 1 260px; min-width: 0; accent-color: var(--accent); }
+.player output { font-size: 20px; min-width: 86px; text-align: right; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--muted); font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 11px; height: 11px; display: inline-block; border-radius: 2px; }
+.legend i.dot { border-radius: 50%; }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 14px; min-width: 0; }
+.eff { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.eff .big { font: 500 46px/1 var(--f-mono); color: var(--accent); }
+.eff .lbl { font: 600 13px var(--f-body); }
+.eff .s { color: var(--muted); font-size: 12.5px; width: 100%; }
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+thead th { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); position: sticky; top: 0; background: var(--surface); }
+tbody th { font-weight: 400; }
+tbody th em { font-style: normal; font-size: 11px; color: var(--muted); margin-left: 4px; }
+td.nm, thead th.r, td.dl { text-align: right; white-space: nowrap; }
+td.un { color: var(--muted); font-size: 12px; white-space: nowrap; }
+td.dl { font-family: var(--f-mono); }
+.good { color: var(--good); } .bad { color: var(--bad); }
+tr.grp th { background: var(--bg); font: 600 12px var(--f-body); letter-spacing: 0.04em; padding-top: 8px; }
+tr.grp.main th { color: var(--accent); }
+
+.brow { display: grid; grid-template-columns: minmax(80px, 0.8fr) 3fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.bname { font-size: 12.5px; overflow-wrap: anywhere; }
+.btrack { background: var(--bg); border-radius: 3px; height: 18px; }
+.bfill { height: 100%; display: flex; border-radius: 3px; overflow: hidden; }
+.bfill span { display: block; height: 100%; }
+.btot { font-size: 12.5px; text-align: right; }
+.legendline { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 12px; margin: 8px 0; }
+.legendline i { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; }
+.sum { margin: 6px 0 0; }
+.charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+svg.ch { width: 100%; height: auto; display: block; }
+svg.ch .gl { stroke: var(--line); stroke-width: 1; }
+svg.ch .ax { fill: var(--muted); font: 10.5px var(--f-mono); }
+svg.ch .lref { fill: none; stroke: var(--ref); stroke-width: 1.8; }
+svg.ch .lsel { fill: none; stroke: var(--sel); stroke-width: 2.2; }
+svg.ch .dref { fill: var(--ref); } svg.ch .dsel { fill: var(--sel); }
+.lg { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12px; margin-top: 4px; }
+.lg i { display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; }
+.note { color: var(--muted); font-size: 12.5px; margin: 10px 0 0; }
+
+@media (max-width: 900px) {
+  .panes, .cols, .charts { grid-template-columns: minmax(0, 1fr); }
+  .right { margin-left: 0; }
+  .cv { height: clamp(300px, 54vh, 440px); }
+  .hud-k { font-size: 11px; min-width: 0; padding: 4px 6px; top: 6px; right: 6px; }
+  .hud-o { font-size: 11px; padding: 4px 6px; left: 6px; bottom: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .sw .knob, .sw .knob::after { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Simulador 3D de Almoxarifado</h1>
+    <p class="sub" id="meta-line"></p>
+    <p class="aviso" id="aviso"></p>
+  </header>
+
+  <section class="controls" aria-label="Tecnologias do cenário da direita">
+    <span class="lab">Ligar no cenário da direita</span>
+    <div class="sws">
+      <button class="sw" id="sw-rfid" role="switch" aria-checked="false"><span class="knob"></span>RFID</button>
+      <button class="sw" id="sw-visao" role="switch" aria-checked="false"><span class="knob"></span>Visão computacional</button>
+      <button class="sw" id="sw-smart" role="switch" aria-checked="false"><span class="knob"></span>SmartStock</button>
+    </div>
+    <div class="right">
+      <label class="chk"><input type="checkbox" id="cam-sync" checked> Câmeras sincronizadas</label>
+      <button class="btn" id="cam-reset" type="button">Recentrar vista</button>
+    </div>
+  </section>
+
+  <section class="panes">
+    <article class="pane" id="pane-ref">
+      <div class="ph">
+        <div><span class="tag">Referência</span><div class="ptitle"></div></div>
+        <div class="chips"><span class="chip">RFID</span><span class="chip">Visão</span><span class="chip">SmartStock</span></div>
+        <select id="sel-ref-s" aria-label="Cenário de referência"></select>
+      </div>
+      <div class="cv"><div class="hud-k"></div><div class="hud-o"></div></div>
+    </article>
+    <article class="pane" id="pane-sel">
+      <div class="ph">
+        <div><span class="tag">Cenário escolhido</span><div class="ptitle"></div></div>
+        <div class="chips"><span class="chip">RFID</span><span class="chip">Visão</span><span class="chip">SmartStock</span></div>
+        <select id="sel-sel-s" aria-label="Cenário escolhido"></select>
+      </div>
+      <div class="cv"><div class="hud-k"></div><div class="hud-o"></div></div>
+    </article>
+  </section>
+
+  <section class="player" aria-label="Controle do tempo">
+    <button class="btn pri" id="t-play" type="button">Pausar</button>
+    <label>Velocidade <select id="t-speed"><option value="30">30x</option><option value="60">60x</option><option value="120">120x</option><option value="300">300x</option><option value="600">600x</option></select></label>
+    <input type="range" id="t-slider" step="1" aria-label="Horário do dia">
+    <output class="nm" id="t-clock">07:00:00</output>
+  </section>
+
+  <section class="legend" aria-label="Legenda">
+    <span><i style="background:#3fae6a"></i>Estoque acima de 50% do máximo</span>
+    <span><i style="background:#e0b252"></i>25% a 50%</span>
+    <span><i style="background:#e5533d"></i>abaixo de 25%</span>
+    <span><i style="background:#7d8a92"></i>vazio</span>
+    <span><i class="dot" style="background:#ff9f1c"></i>sistema diferente do físico</span>
+    <span><i class="dot" style="background:#a855f7"></i>item fora do endereço</span>
+    <span><i class="dot" style="background:#2bb5a8"></i>leitura RFID</span>
+    <span><i class="dot" style="background:#38bdf8"></i>leitura por câmera</span>
+  </section>
+
+  <section class="cols">
+    <div class="card">
+      <h2>Comparação de indicadores</h2>
+      <div class="eff"><span class="lbl">Índice de eficiência</span><span class="big nm" id="eff-val">—</span><span class="s" id="eff-sub"></span></div>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Indicador</th><th>Unidade</th><th class="r" id="ref-name">Referência</th><th class="r" id="sel-name">Escolhido</th><th class="r">Variação</th></tr></thead>
+          <tbody id="kpi-body"></tbody>
+        </table>
+      </div>
+      <p class="note">O índice usa os mesmos pesos da planilha (itens de eficiência operacional) e vale 100 no cenário de referência. Cada nota é limitada a 2,00.</p>
+    </div>
+    <div class="card">
+      <h2>Custo anual</h2>
+      <div id="cost-bars"></div>
+      <p class="sum" id="cost-sum"></p>
+      <p class="note">O custo das tecnologias vem da aba Módulos da planilha (valores de exemplo, a substituir por orçamentos).</p>
+    </div>
+  </section>
+
+  <section class="charts">
+    <div class="card">
+      <h2>Divergência de inventário ao longo do ano</h2>
+      <svg class="ch" id="ch-div" role="img" aria-label="Divergência de inventário por dia, referência e cenário escolhido"></svg>
+      <div class="lg"><span><i style="background:var(--ref)"></i><span class="lg-ref"></span></span><span><i style="background:var(--sel)"></i><span class="lg-sel"></span></span></div>
+    </div>
+    <div class="card">
+      <h2>Valor em estoque ao longo do ano</h2>
+      <svg class="ch" id="ch-est" role="img" aria-label="Valor em estoque por dia, referência e cenário escolhido"></svg>
+      <div class="lg"><span><i style="background:var(--ref)"></i><span class="lg-ref"></span></span><span><i style="background:var(--sel)"></i><span class="lg-sel"></span></span></div>
+    </div>
+  </section>
+</div>
+<script type="application/json" id="dados">{{DADOS}}</script>
+{{LIBS}}
+<script>
+{{MAIN}}
+</script>
